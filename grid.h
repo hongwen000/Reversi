@@ -14,7 +14,7 @@ class PaintBlock: public QWidget
 public:
     explicit PaintBlock(QWidget * parent = nullptr): QWidget(parent), pic(":/img/white.png"){}
     void setPic(const QString& filen);
-    void PaintBlock::overlayPic(const QString& filen);
+    void setOverlayPic(const QString& filen);
     int id;
 private:
     QPixmap pic;
@@ -47,6 +47,14 @@ public:
         if(col > pBlocks[row].size())
             throw(runtime_error("setPic: col > pBlocks[col].size()"));
         pBlocks[row][col]->setPic(filen);
+    }
+    void setOverlayPic(size_t row, size_t col, const QString& filen)
+    {
+        if(row > pBlocks.size())
+            throw(runtime_error("setPic: row > pBlocks.size()"));
+        if(col > pBlocks[row].size())
+            throw(runtime_error("setPic: col > pBlocks[col].size()"));
+        pBlocks[row][col]->setOverlayPic(filen);
     }
     vector<vector<T*>> pBlocks;
     size_t row;

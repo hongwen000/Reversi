@@ -180,7 +180,7 @@ void MainWindow::processMove(size_t this_row, size_t this_col)
     else if(!currentPlayer && chk) s = BCFN;
     else s = WCFN;
 
-    grid->setPic(this_row, this_col, s);
+    grid->setOverlayPic(this_row, this_col, s);
     grid->pBlocks[this_row][this_col]->isOccupied = true;
     if(playerType[currentPlayer] == COMPUTER)
     {

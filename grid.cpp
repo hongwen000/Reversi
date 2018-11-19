@@ -6,9 +6,10 @@ void PaintBlock::setPic(const QString &filen)
     update();
 }
 
-void PaintBlock::overlayPic(const QString& filen)
+void PaintBlock::setOverlayPic(const QString& filen)
 {
     picover.load(filen);
+    update();
 }
 
 void PaintBlock::paintEvent(QPaintEvent *)
