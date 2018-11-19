@@ -14,9 +14,11 @@ class PaintBlock: public QWidget
 public:
     explicit PaintBlock(QWidget * parent = nullptr): QWidget(parent), pic(":/img/white.png"){}
     void setPic(const QString& filen);
+    void PaintBlock::overlayPic(const QString& filen);
     int id;
 private:
     QPixmap pic;
+    QPixmap picover;
     QString picfile;
     QRect rectangle;
 protected:

@@ -8,10 +8,12 @@
 #include <atomic>
 #include <QtNetwork>
 #include <QDebug>
+#include <QInputDialog>
+#include <QLCDNumber>
 using namespace std;
 
-#define ODDFN  ":/img/Odd.png"
-#define EVENFN  ":/img/Even.png"
+#define ODDFN  ":/img/Even.png"
+#define EVENFN  ":/img/Odd.png"
 #define WCFN  ":/img/white_chess.png"
 #define BCFN  ":/img/black_chess.png"
 //extern int playerListenPort[2];
@@ -45,15 +47,21 @@ private slots:
 
     void on_pushButton_3_clicked();
 
+    void on_comboBox_p2_currentTextChanged(const QString &arg1);
+
+    void on_pushButton_clicked();
+
 private:
     Ui::MainWindow *ui;
     size_t row;
     size_t col;
-    Grid<ChessBlock>* grid;
-    std::thread* control_thread;
-    QUdpSocket* receiver;
+    Grid<ChessBlock>* grid = nullptr;
+    std::thread* control_thread = nullptr;
+    std::thread* ai_thread = nullptr;
+    QUdpSocket* receiver = nullptr;
     atomic_bool exit;
     QTimer *pTimer = nullptr;
+    int remoteListenPort = -1;
     void processMove(size_t this_row, size_t this_col);
     void test_func()
     {
@@ -63,6 +71,11 @@ private:
     void control_func();
     void resetBoard();
     void setCurrentPlayer(int player);
+    void startGame();
+signals:
+    void remoteChallengeEvent(const QString &);
+private slots:
+    void on_remoteChallengeEvent(const QString &str);
 };
 
 #endif // MAINWINDOW_H

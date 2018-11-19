@@ -6,6 +6,11 @@ void PaintBlock::setPic(const QString &filen)
     update();
 }
 
+void PaintBlock::overlayPic(const QString& filen)
+{
+    picover.load(filen);
+}
+
 void PaintBlock::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
@@ -19,6 +24,11 @@ void PaintBlock::paintEvent(QPaintEvent *)
     {
         painter.setRenderHint(QPainter::HighQualityAntialiasing, true);
         painter.drawPixmap(rect(), pic);
+        if(!picover.isNull())
+        {
+            painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+            painter.drawPixmap(rect(), picover);
+        }
     }
 }
 

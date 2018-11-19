@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>590</width>
-    <height>445</height>
+    <height>474</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -33,12 +33,19 @@
     <property name="geometry">
      <rect>
       <x>440</x>
-      <y>20</y>
+      <y>10</y>
       <width>121</width>
-      <height>331</height>
+      <height>371</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout">
+     <item>
+      <widget class="QLabel" name="label_3">
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+     </item>
      <item>
       <widget class="QLCDNumber" name="lcdNumber"/>
      </item>
@@ -90,6 +97,19 @@
       </widget>
      </item>
      <item>
+      <widget class="QLineEdit" name="lineEdit">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="autoFillBackground">
+        <bool>false</bool>
+       </property>
+       <property name="text">
+        <string>127.0.0.1:</string>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QCheckBox" name="checkBox">
        <property name="text">
         <string>玩家一先手</string>
@@ -109,7 +129,14 @@
      <item>
       <widget class="QPushButton" name="pushButton_3">
        <property name="text">
-        <string>强制结束</string>
+        <string>结束</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton">
+       <property name="text">
+        <string>复制端口号</string>
        </property>
       </widget>
      </item>
@@ -122,7 +149,7 @@
      <x>0</x>
      <y>0</y>
      <width>590</width>
-     <height>30</height>
+     <height>22</height>
     </rect>
    </property>
   </widget>
@@ -145,7 +172,11 @@
     <bool>false</bool>
    </attribute>
   </widget>
-  <widget class="QStatusBar" name="statusBar"/>
+  <widget class="QStatusBar" name="statusBar">
+   <property name="mouseTracking">
+    <bool>true</bool>
+   </property>
+  </widget>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <resources/>
