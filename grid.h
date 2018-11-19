@@ -13,8 +13,8 @@ class PaintBlock: public QWidget
     Q_OBJECT
 public:
     explicit PaintBlock(QWidget * parent = nullptr): QWidget(parent), pic(":/img/white.png"){}
-
     void setPic(const QString& filen);
+    int id;
 private:
     QPixmap pic;
     QString picfile;
@@ -26,6 +26,9 @@ protected:
 template <typename T>
 class Grid
 {
+private:
+    QWidget* parent;
+    QGridLayout* layout;
 public:
     Grid(QWidget* parent, QGridLayout* layout, size_t row, size_t col)
         :parent(parent), layout(layout), row(row), col(col)
@@ -43,9 +46,6 @@ public:
             throw(runtime_error("setPic: col > pBlocks[col].size()"));
         pBlocks[row][col]->setPic(filen);
     }
-private:
-    QWidget* parent;
-    QGridLayout* layout;
     vector<vector<T*>> pBlocks;
     size_t row;
     size_t col;
@@ -69,6 +69,7 @@ private:
             for(size_t j = 0; j < col; ++j)
             {
                 auto pBlock = new T(parent);
+                pBlock->id = i * row + j;
                 vBlocks.push_back(pBlock);
                 layout->addWidget(pBlock, i, j);
             }

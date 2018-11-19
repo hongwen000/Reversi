@@ -21,3 +21,4 @@ void PaintBlock::paintEvent(QPaintEvent *)
         painter.drawPixmap(rect(), pic);
     }
 }
+
