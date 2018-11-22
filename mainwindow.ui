@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>590</width>
-    <height>515</height>
+    <height>592</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -35,7 +35,7 @@
       <x>440</x>
       <y>10</y>
       <width>121</width>
-      <height>411</height>
+      <height>496</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout">
@@ -154,6 +154,20 @@
        </property>
       </widget>
      </item>
+     <item>
+      <widget class="QLabel" name="label_6">
+       <property name="text">
+        <string>思考层数：</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="lineEdit_depth">
+       <property name="text">
+        <string>1</string>
+       </property>
+      </widget>
+     </item>
     </layout>
    </widget>
   </widget>
@@ -163,7 +177,7 @@
      <x>0</x>
      <y>0</y>
      <width>590</width>
-     <height>22</height>
+     <height>30</height>
     </rect>
    </property>
   </widget>

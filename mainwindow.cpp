@@ -16,7 +16,10 @@ std::map<QString, int> mp = {{"人类", HUMAN},
 
 void sendMove(int move)
 {
-    QByteArray datagram = QByteArray::number(move);
+    json j;
+    j["magic"] = MAGIC_NUM;
+    j["id"] = move;
+    QByteArray datagram = QByteArray::fromStdString(j.dump());
     auto sender = new QUdpSocket(nullptr);
     QHostAddress host1(playerIP[0]);
     sender->writeDatagram(datagram, host1, playerListenPorts[0]);
@@ -28,18 +31,20 @@ void sendMove(int move)
     }
 }
 
-void panicAI(Grid<ChessBlock> * grid)
+
+void MainWindow::AI(const State& s)
 {
-    srand(time(nullptr));
-    while(true)
+//    QThread::sleep(1);
+    int bestMove = -1;
+    qDebug() << "Best estimation value: " << MinMax(s, getCurrentPlayerChessColor(), 5, positionalValue, bestMove);
+    if(bestMove == -1)
     {
-        auto r = rand() % grid->row;
-        auto c = rand() % grid->col;
-        if(grid->pBlocks[r][c]->isOccupied || !grid->pBlocks[r][c]->isAvailable)
-            continue;
-        QThread::sleep(2);
-        sendMove(r * grid->col + c);
-        break;
+        gamming = false;
+        resetTimer();
+    }
+    else
+    {
+        sendMove(bestMove);
     }
 }
 
@@ -79,13 +84,27 @@ void MainWindow::control_func()
         QHostAddress addr;
         quint16 port;
         datagram.resize(size);
+        int id;
+        json j;
         receiver->readDatagram(datagram.data(), datagram.size(), &addr, &port);
+        try {
+            j = json::parse(datagram.toStdString());
+        } catch (...) {
+            continue;
+        }
+        try {
+            if(j["magic"] != MAGIC_NUM) throw;
+            id = j["id"];
+            qDebug() << "Player " << currentPlayer << " down at" << id;
+        } catch(...) {
+            continue;
+        }
         if(!gamming)
         {
             ui->checkBox->setChecked(false);
             startGame();
         }
-        auto block = datagram.toInt();
+        auto block = id;
         auto this_row = block/col;
         auto this_col = (block - (block / col) * row);
         processMove(this_row, this_col);
@@ -141,7 +160,7 @@ void MainWindow::startGame()
     processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2, WHITE);
     processGrid(GAMESCALE / 2, GAMESCALE / 2 - 1, WHITE);
     processGrid(GAMESCALE / 2, GAMESCALE / 2, BLACK);
-    qDebug() << "I am player " << getFirstPlayer();
+    qDebug() << "Player " << getFirstPlayer() << " uses black chess";
     setCurrentPlayer(getFirstPlayer());
     auto ret = getAvail(toState(), getCurrentPlayerChessColor());
     drawAvailNum(ret);
@@ -208,6 +227,17 @@ void MainWindow::processGrid(int x, int y, int color)
     emit reqRepaint();
 }
 
+void MainWindow::resetTimer()
+{
+    pTimer->stop();
+    delete pTimer;
+    pTimer = nullptr;
+    QPalette pal = palette();
+    pal.setColor(QPalette::Background, Qt::GlobalColor::white);
+    ui->lcdNumber->setPalette(pal);
+    ui->lcdNumber->display(0);
+}
+
 void MainWindow::on_reqRepaint()
 {
 //    update();
@@ -259,11 +289,13 @@ void ChessBlock::mousePressEvent(QMouseEvent *e)
 
 void MainWindow::on_pushButton_2_clicked()
 {
+    ui->pushButton_2->setEnabled(false);
     startGame();
     if(playerType[currentPlayer] == COMPUTER)
     {
-        ai_thread = new std::thread(panicAI, grid);
+        ai_thread = new std::thread(&MainWindow::AI, this, toState());
     }
+    ui->pushButton_3->setEnabled(true);
 }
 
 void MainWindow::processMove(size_t x, size_t y)
@@ -280,7 +312,7 @@ void MainWindow::processMove(size_t x, size_t y)
     emit reqRepaint();
     if(playerType[currentPlayer] == COMPUTER)
     {
-        ai_thread = new std::thread(panicAI, grid);
+        ai_thread = new std::thread(&MainWindow::AI, this, toState());
     }
 }
 
@@ -302,17 +334,14 @@ int MainWindow::getCurrentPlayerChessColor()
 
 void MainWindow::on_pushButton_3_clicked()
 {
+    ui->pushButton_2->setEnabled(true);
     if(ai_thread && ai_thread->joinable())
         ai_thread->join();
-    pTimer->stop();
-    delete pTimer;
-    pTimer = nullptr;
-    QPalette pal = palette();
-    pal.setColor(QPalette::Background, Qt::GlobalColor::white);
-    ui->lcdNumber->setPalette(pal);
-    ui->lcdNumber->display(0);
+    gamming = false;
+    resetTimer();
     grid->reDraw();
     resetBoard();
+    ui->pushButton_3->setEnabled(false);
 
 }
 

@@ -34,7 +34,6 @@ State getNextState(const State &s, int id, int color)
     {
         int i = x;
         int j = y;
-        qDebug() << "Click on " << i << " " << j;
         int fx = -1;
         int fy = -1;
         auto [dx, dy] = checkDirection[d];
@@ -63,7 +62,7 @@ State getNextState(const State &s, int id, int color)
                 {
 //                    qDebug() << "fx, fy: " << fx << " " << fy;
 //                    qDebug() << "set i, j " << i << " " << j;
-                    ret[getID(i,j)] = color;
+                    ret[getID(i,j)] = (uint8_t)color;
                 }
             }
         }
@@ -94,7 +93,11 @@ std::array<int, GAMESCALE * GAMESCALE> getAvail(const State& s, int color)
     for(auto & i: ret) i = 0;
     for(int id = 0; id < GAMESCALE * GAMESCALE; ++id)
     {
-        if(s[id] != EMPTY) ret[id] = 0;
+        if(s[id] != EMPTY)
+        {
+            ret[id] = 0;
+            continue;
+        }
         auto [x, y] = getXY(id);
         for(int d = 0; d < 8; ++d)
         {
@@ -130,4 +133,105 @@ std::array<int, GAMESCALE * GAMESCALE> getAvail(const State& s, int color)
         }
     }
     return ret;
+}
+
+static const int values[8][8] =
+{{ 30, -25, 10, 5, 5, 10, -25,  30,},
+{-25, -25,  1, 1, 1,  1, -25, -25,},
+{ 10,   1,  5, 2, 2,  5,   1,  10,},
+{  5,   1,  2, 1, 1,  2,   1,   5,},
+{  5,   1,  2, 1, 1,  2,   1,   5,},
+{ 10,   1,  5, 2, 2,  5,   1,  10,},
+{-25, -25,  1, 1, 1,  1, -25, -25,},
+{ 30, -25, 10, 5, 5, 10, -25,  30,},};
+
+static const int * pvalues = ((const int *)values);
+
+
+int positionalValue(const State& s)
+{
+    if(GAMESCALE != 8) throw;
+    int ret = 0;
+    for(int i = 0; i < 64; ++i)
+    {
+        if(s[i] == EMPTY) continue;
+        else if(s[i] == BLACK) ret += *(pvalues + i);
+        else ret -= *(pvalues + i);
+    }
+    return ret;
+}
+
+int MinMax(const State& s, int color, int limit, const valueFunc& V, int & bestMove)
+{
+    if(limit == 0) return V(s);
+    auto avil = getAvail(s, color);
+    bool isTerminal = true;
+    int bestValue = 0;
+    int lbestMove;
+    for(size_t i = 0; i < avil.size(); ++i)
+    {
+        if(avil[i] == 0) continue;
+        isTerminal = false;
+        if(bestValue == 0)
+            bestMove = i;
+        auto ns = s;
+        ns[i] = (uint8_t)color;
+        auto ret = MinMax(ns, !color, limit - 1, V, lbestMove);
+        if((color == BLACK && ret > bestValue) || (color == WHITE && ret < bestValue))
+        {
+            bestValue = ret;
+            bestMove = i;
+        }
+    }
+    if(isTerminal) return V(s);
+    return bestValue;
+}
+
+int AlphaBeta(const State& s, int color, int limit, const valueFunc& V, int alpha, int beta, int & bestMove)
+{
+    if(limit == 0) return V(s);
+    std::vector<int> childrenValue;
+    auto avil = getAvail(s, color);
+    bool isTerminal = true;
+    int lbestMove;
+    if(color == BLACK)
+    {
+        for(size_t i = 0; i < avil.size(); ++i)
+        {
+            if(avil[i] == 0) continue;
+            isTerminal = false;
+            auto ns = s;
+            ns[i] = (uint8_t)color;
+            auto new_alpha = AlphaBeta(ns, !color, limit - 1, V, alpha, beta, lbestMove);
+            if(new_alpha > alpha)
+            {
+                alpha = new_alpha;
+                bestMove = i;
+            }
+            if(beta <= alpha)
+                break;
+        }
+        if(isTerminal) return V(s);
+        else return alpha;
+    }
+    else
+    {
+        for(size_t i = 0; i < avil.size(); ++i)
+        {
+            if(avil[i] == 0) continue;
+            isTerminal = false;
+            auto ns = s;
+            ns[i] = (uint8_t)color;
+            auto new_beta = AlphaBeta(ns, !color, limit - 1, V, alpha, beta, lbestMove);
+            if(new_beta < beta)
+            {
+                beta = new_beta;
+                bestMove = i;
+            }
+            if(beta <= alpha)
+                break;
+        }
+        if(isTerminal) return V(s);
+        else return beta;
+    }
 }

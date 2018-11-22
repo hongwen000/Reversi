@@ -5,6 +5,7 @@
 using namespace std;
 #define GAMESCALE 8
 #include <utility>
+#include <functional>
 enum {EMPTY = 0, BLACK, WHITE};
 
 using State = std::array<uint8_t, GAMESCALE * GAMESCALE>;
@@ -15,5 +16,9 @@ pair<int,int> getXY(int id);
 int getID(int x, int y);
 State getNextState(const State& s, int id, int color);
 std::array<int, GAMESCALE * GAMESCALE> getAvail(const State& s, int color);
+int positionalValue(const State& s);
+using valueFunc = std::function<int(const State& s)>;
+int MinMax(const State& s, int color, int limit, const valueFunc& V, int & bestMove);
+int AlphaBeta(const State& s, int color, int limit, const valueFunc& V, int alpha, int beta, int & bestMove);
 
 #endif // REVERSI_H

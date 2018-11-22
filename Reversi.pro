@@ -36,7 +36,8 @@ SOURCES += \
 HEADERS += \
         mainwindow.h \
     grid.h \
-    reversi.h
+    reversi.h \
+    json.hpp
 
 FORMS += \
         mainwindow.ui

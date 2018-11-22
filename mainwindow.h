@@ -11,6 +11,9 @@
 #include <QInputDialog>
 #include <QLCDNumber>
 #include "reversi.h"
+#include "json.hpp"
+using json = nlohmann::json;
+#define MAGIC_NUM "aahsudfhuasjkhgfusdhfuyhsjdfihweuqgh"
 using namespace std;
 
 #define ODDFN  ":/img/Even.png"
@@ -74,6 +77,7 @@ private:
     }
     int getFirstPlayer();
     int getCurrentPlayerChessColor();
+    void AI(const State& s);
     void control_func();
     void resetBoard();
     void setCurrentPlayer(int player);
@@ -82,6 +86,7 @@ private:
     State toState();
     pair<int, int> fromState(const State& s);
     void processGrid(int x, int y, int color);
+    void resetTimer();
 signals:
     void remoteChallengeEvent(const QString &);
     void reqRepaint();
