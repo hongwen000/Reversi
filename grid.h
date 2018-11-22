@@ -16,9 +16,11 @@ public:
     void setPic(const QString& filen);
     void setOverlayPic(const QString& filen);
     int id;
-private:
+protected:
     QPixmap pic;
     QPixmap picover;
+    QPixmap pic_ori;
+    QPixmap picover_ori;
     QString picfile;
     QRect rectangle;
 protected:

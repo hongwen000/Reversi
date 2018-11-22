@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 #include <QDebug>
 #include <map>
+#include <QThread>
 #include <QClipboard>
 
 int currentPlayer;
@@ -34,8 +35,9 @@ void panicAI(Grid<ChessBlock> * grid)
     {
         auto r = rand() % grid->row;
         auto c = rand() % grid->col;
-        if(grid->pBlocks[r][c]->isOccupied)
+        if(grid->pBlocks[r][c]->isOccupied || !grid->pBlocks[r][c]->isAvailable)
             continue;
+        QThread::sleep(2);
         sendMove(r * grid->col + c);
         break;
     }
@@ -57,11 +59,13 @@ MainWindow::MainWindow(QWidget *parent, size_t row, size_t col) :
     ui->lcdNumber->setAutoFillBackground(true);
     ui->lineEdit->setPlaceholderText("远程玩家 IP:Port");
     connect(this, SIGNAL(remoteChallengeEvent(QString)), this, SLOT(on_remoteChallengeEvent(QString)));
+    connect(this, &MainWindow::reqRepaint, this, &MainWindow::on_reqRepaint);
 }
 
 MainWindow::~MainWindow()
 {
     exit = true;
+    control_thread->join();
     delete ui;
 }
 
@@ -106,6 +110,7 @@ void MainWindow::resetBoard()
                 grid->setPic(i, j, EVENFN);
             else
                 grid->setPic(i, j, ODDFN);
+            grid->pBlocks[i][j]->color = EMPTY;
         }
     }
 }
@@ -125,10 +130,22 @@ void MainWindow::setCurrentPlayer(int player)
     ui->lcdNumber->display(0);
 }
 
+
 void MainWindow::startGame()
 {
-    qDebug() << "I am player " << !ui->checkBox->isChecked();
-    setCurrentPlayer(!ui->checkBox->isChecked());
+//    processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2 - 1, WHITE);
+//    processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2, BLACK);
+//    processGrid(GAMESCALE / 2, GAMESCALE / 2 - 1, BLACK);
+//    processGrid(GAMESCALE / 2, GAMESCALE / 2, WHITE);
+    processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2 - 1, BLACK);
+    processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2, WHITE);
+    processGrid(GAMESCALE / 2, GAMESCALE / 2 - 1, WHITE);
+    processGrid(GAMESCALE / 2, GAMESCALE / 2, BLACK);
+    qDebug() << "I am player " << getFirstPlayer();
+    setCurrentPlayer(getFirstPlayer());
+    auto ret = getAvail(toState(), getCurrentPlayerChessColor());
+    drawAvailNum(ret);
+    reqRepaint();
     playerType[0] = mp[ui->comboBox_p1->currentText()];
     playerType[1] = mp[ui->comboBox_p2->currentText()];
     if(playerType[1] == REMOTE)
@@ -141,8 +158,65 @@ void MainWindow::startGame()
 
 }
 
+void MainWindow::drawAvailNum(const array<int, GAMESCALE * GAMESCALE> &avi)
+{
+    for(int i = 0; i < GAMESCALE * GAMESCALE; ++i)
+    {
+        auto [x,y] = getXY(i);
+        grid->pBlocks[x][y]->drawNum(avi[i]);
+    }
+}
+
+State MainWindow::toState()
+{
+    State ret;
+    for(int i = 0; i < GAMESCALE; ++i)
+    {
+        for (int j = 0; j < GAMESCALE; ++j)
+        {
+            ret[getID(i,j)] = grid->pBlocks[i][j]->color;
+        }
+    }
+    return ret;
+}
+
+pair<int, int> MainWindow::fromState(const State &s)
+{
+    int b = 0;
+    int w = 0;
+    for(int i = 0; i < GAMESCALE; ++i)
+    {
+        for (int j = 0; j < GAMESCALE; ++j)
+        {
+            auto c = s[getID(i,j)];
+            if(c == BLACK) b++;
+            if(c == WHITE) w++;
+            if(grid->pBlocks[i][j]->color != c)
+            {
+                processGrid(i, j, c);
+            }
+        }
+    }
+    return {b,w};
+}
+
+void MainWindow::processGrid(int x, int y, int color)
+{
+    grid->setOverlayPic(x, y, color == WHITE ? WCFN : BCFN);
+    grid->pBlocks[x][y]->color = color;
+    grid->pBlocks[x][y]->isOccupied = true;
+    emit reqRepaint();
+}
+
+void MainWindow::on_reqRepaint()
+{
+//    update();
+    repaint();
+}
+
 void MainWindow::on_remoteChallengeEvent(const QString &str)
 {
+    Q_UNUSED(str);
     if(!pTimer)
     {
         pTimer = new QTimer(nullptr);
@@ -154,10 +228,32 @@ void MainWindow::on_remoteChallengeEvent(const QString &str)
 }
 
 
+void ChessBlock::drawNum(int n)
+{
+    if(n == 0 && !isOccupied)
+    {
+        isAvailable = false;
+        pic = pic_ori;
+        return;
+    }
+    else if(n != 0 && !isOccupied)
+    {
+        isAvailable = true;
+        QPainter p;
+        pic = pic_ori;
+        p.begin(&pic);
+        p.setPen(QPen(Qt::GlobalColor::black));
+        p.drawText(pic.rect(), Qt::AlignCenter, QString::number(n));
+        p.end();
+    }
+    else if(isOccupied)
+        return;
+}
+
 void ChessBlock::mousePressEvent(QMouseEvent *e)
 {
     Q_UNUSED(e);
-    if(!gamming || playerType[currentPlayer] != HUMAN || isOccupied) return;
+    if(!gamming || playerType[currentPlayer] != HUMAN || isOccupied || !isAvailable) return;
     sendMove(id);
 }
 
@@ -170,22 +266,38 @@ void MainWindow::on_pushButton_2_clicked()
     }
 }
 
-void MainWindow::processMove(size_t this_row, size_t this_col)
+void MainWindow::processMove(size_t x, size_t y)
 {
+    auto color = getCurrentPlayerChessColor();
+    processGrid(x, y, color);
+    auto n = getNextState(toState(), getID(x,y), color);
+    auto [b,w] = fromState(n);
+    ui->label_4->setText("黑子数量：" + QString::number(b));
+    ui->label_5->setText("白子数量：" + QString::number(w));
     setCurrentPlayer(!currentPlayer);
-    QString s;
-    auto chk = ui->checkBox->isChecked();
-    if(currentPlayer && chk) s = WCFN;
-    else if(currentPlayer && !chk) s = BCFN;
-    else if(!currentPlayer && chk) s = BCFN;
-    else s = WCFN;
-
-    grid->setOverlayPic(this_row, this_col, s);
-    grid->pBlocks[this_row][this_col]->isOccupied = true;
+    auto avi = getAvail(n, getCurrentPlayerChessColor());
+    drawAvailNum(avi);
+    emit reqRepaint();
     if(playerType[currentPlayer] == COMPUTER)
     {
         ai_thread = new std::thread(panicAI, grid);
     }
+}
+
+int MainWindow::getFirstPlayer()
+{
+    return !ui->checkBox->isChecked();
+}
+
+int MainWindow::getCurrentPlayerChessColor()
+{
+    int color;
+    auto chk = ui->checkBox->isChecked();
+    if(currentPlayer && chk) color = WHITE;
+    else if(currentPlayer && !chk) color = BLACK;
+    else if(!currentPlayer && chk) color = BLACK;
+    else color = WHITE;
+    return color;
 }
 
 void MainWindow::on_pushButton_3_clicked()
