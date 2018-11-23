@@ -10,9 +10,10 @@
 #include <QDebug>
 #include <QInputDialog>
 #include <QLCDNumber>
+#include <QJsonObject>
 #include "reversi.h"
-#include "json.hpp"
-using json = nlohmann::json;
+//#include "json.hpp"
+//using json = nlohmann::json;
 #define MAGIC_NUM "aahsudfhuasjkhgfusdhfuyhsjdfihweuqgh"
 using namespace std;
 
@@ -65,6 +66,7 @@ private:
     Grid<ChessBlock>* grid = nullptr;
     std::thread* control_thread = nullptr;
     std::thread* ai_thread = nullptr;
+    std::thread* panic_ai_thread = nullptr;
     QUdpSocket* receiver = nullptr;
     atomic_bool exit;
     QTimer *pTimer = nullptr;
@@ -87,6 +89,7 @@ private:
     pair<int, int> fromState(const State& s);
     void processGrid(int x, int y, int color);
     void resetTimer();
+    void panicAI(Grid<ChessBlock> * grid);
 signals:
     void remoteChallengeEvent(const QString &);
     void reqRepaint();

@@ -4,6 +4,9 @@
 #include <map>
 #include <QThread>
 #include <QClipboard>
+#include <QTime>
+#include <cstdint>
+using namespace std;
 
 int currentPlayer;
 QString playerIP[2] = {"127.0.0.1", "127.0.0.1"};
@@ -16,10 +19,15 @@ std::map<QString, int> mp = {{"人类", HUMAN},
 
 void sendMove(int move)
 {
-    json j;
-    j["magic"] = MAGIC_NUM;
-    j["id"] = move;
-    QByteArray datagram = QByteArray::fromStdString(j.dump());
+    QJsonObject j;
+//    json j;
+    j.insert("magic", MAGIC_NUM);
+//    j["magic"] = MAGIC_NUM;
+    j.insert("id", move);
+//    j["id"] = move;
+    QJsonDocument document;
+    document.setObject(j);
+    QByteArray datagram = document.toJson(QJsonDocument::Compact);
     auto sender = new QUdpSocket(nullptr);
     QHostAddress host1(playerIP[0]);
     sender->writeDatagram(datagram, host1, playerListenPorts[0]);
@@ -31,16 +39,38 @@ void sendMove(int move)
     }
 }
 
+void MainWindow::panicAI(Grid<ChessBlock> * grid)
+{
+    srand(time(nullptr));
+    while(true)
+    {
+        vector<pair<int,int>> possibleMove;
+        for(int i = 0; i < GAMESCALE; ++i)
+        {
+            for(int j = 0; j < GAMESCALE; ++j)
+            {
+                if(!grid->pBlocks[i][j]->isOccupied && grid->pBlocks[i][j]->isAvailable)
+                    possibleMove.push_back({i,j});
+            }
+        }
+        if(possibleMove.size() == 0) break;
+        auto n = rand() % possibleMove.size();
+        sendMove(possibleMove[n].first * grid->row + possibleMove[n].second);
+        break;
+    }
+}
 
 void MainWindow::AI(const State& s)
 {
 //    QThread::sleep(1);
     int bestMove = -1;
-    qDebug() << "Best estimation value: " << MinMax(s, getCurrentPlayerChessColor(), 5, positionalValue, bestMove);
+    QTime time;
+    time.start();
+    qDebug() << "Best estimation value: " << AlphaBeta(s, getCurrentPlayerChessColor(), 5, positionalValue, INT_MIN, INT_MAX, bestMove);
+    qDebug() << "Search Spend: " << time.elapsed() << "(ms)";
     if(bestMove == -1)
     {
         gamming = false;
-        resetTimer();
     }
     else
     {
@@ -85,20 +115,33 @@ void MainWindow::control_func()
         quint16 port;
         datagram.resize(size);
         int id;
-        json j;
+//        json j;
+        QJsonParseError jsonError;
+        QJsonDocument document;
         receiver->readDatagram(datagram.data(), datagram.size(), &addr, &port);
-        try {
-            j = json::parse(datagram.toStdString());
-        } catch (...) {
+        document = QJsonDocument::fromJson(datagram, &jsonError);
+        if(document.isNull() || !(jsonError.error == QJsonParseError::NoError) || !document.isObject())
             continue;
-        }
-        try {
-            if(j["magic"] != MAGIC_NUM) throw;
-            id = j["id"];
-            qDebug() << "Player " << currentPlayer << " down at" << id;
-        } catch(...) {
+        QJsonObject object = document.object();
+        if(!object.contains("magic") || !object.value("magic").isString())
             continue;
-        }
+        auto magic = object.value("magic").toString();
+        if(magic != MAGIC_NUM)
+            continue;
+        id = object.value("id").toInt();
+        qDebug() << "Player " << currentPlayer << " down at row:" << id / GAMESCALE << ", col:" << id % GAMESCALE;
+
+//        try {
+////            j = json::parse(datagram.toStdString());
+//        } catch (...) {
+//            continue;
+//        }
+//        try {
+//            if(j["magic"] != MAGIC_NUM) throw;
+//            id = j["id"];
+//        } catch(...) {
+//            continue;
+//        }
         if(!gamming)
         {
             ui->checkBox->setChecked(false);
@@ -181,7 +224,10 @@ void MainWindow::drawAvailNum(const array<int, GAMESCALE * GAMESCALE> &avi)
 {
     for(int i = 0; i < GAMESCALE * GAMESCALE; ++i)
     {
-        auto [x,y] = getXY(i);
+        auto ret = getXY(i);
+        int x = ret.first;
+        int y = ret.second;
+//        auto [x,y] = getXY(i);
         grid->pBlocks[x][y]->drawNum(avi[i]);
     }
 }
@@ -303,7 +349,11 @@ void MainWindow::processMove(size_t x, size_t y)
     auto color = getCurrentPlayerChessColor();
     processGrid(x, y, color);
     auto n = getNextState(toState(), getID(x,y), color);
-    auto [b,w] = fromState(n);
+    auto ret = fromState(n);
+    int b = ret.first;
+    int w = ret.second;
+//    auto [b,w] = fromState(n);
+
     ui->label_4->setText("黑子数量：" + QString::number(b));
     ui->label_5->setText("白子数量：" + QString::number(w));
     setCurrentPlayer(!currentPlayer);
@@ -314,6 +364,14 @@ void MainWindow::processMove(size_t x, size_t y)
     {
         ai_thread = new std::thread(&MainWindow::AI, this, toState());
     }
+//    if(currentPlayer == PLAYER1 && playerType[currentPlayer] == COMPUTER)
+//    {
+//        ai_thread = new std::thread(&MainWindow::AI, this, toState());
+//    }
+//    if(currentPlayer == PLAYER2 && playerType[currentPlayer] == COMPUTER)
+//    {
+//        panic_ai_thread = new std::thread(&MainWindow::panicAI, this, grid);
+//    }
 }
 
 int MainWindow::getFirstPlayer()

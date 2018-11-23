@@ -16,8 +16,8 @@ pair<int,int> getXY(int id);
 int getID(int x, int y);
 State getNextState(const State& s, int id, int color);
 std::array<int, GAMESCALE * GAMESCALE> getAvail(const State& s, int color);
-int positionalValue(const State& s);
-using valueFunc = std::function<int(const State& s)>;
+int positionalValue(const State& s, int color);
+using valueFunc = std::function<int(const State& s, int color)>;
 int MinMax(const State& s, int color, int limit, const valueFunc& V, int & bestMove);
 int AlphaBeta(const State& s, int color, int limit, const valueFunc& V, int alpha, int beta, int & bestMove);
 

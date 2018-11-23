@@ -2,6 +2,7 @@
 #define GRID_H
 #include <QGridLayout>
 #include <vector>
+#include <QLabel>
 #include <QWidget>
 #include <QPainter>
 #include <QPen>
@@ -33,6 +34,7 @@ class Grid
 private:
     QWidget* parent;
     QGridLayout* layout;
+    vector<QLabel*> pLabels;
 public:
     Grid(QWidget* parent, QGridLayout* layout, size_t row, size_t col)
         :parent(parent), layout(layout), row(row), col(col)
@@ -63,6 +65,15 @@ public:
     size_t col;
     void reDraw()
     {
+        for(auto& l: pLabels)
+        {
+            if(l)
+            {
+                layout->removeWidget(l);
+                if(l) delete l;
+            }
+        }
+        pLabels.clear();
         for(auto& v: pBlocks)
         {
             for(auto& p: v)
@@ -75,18 +86,50 @@ public:
             }
         }
         pBlocks.clear();
-        for(size_t i = 0; i < row; ++i)
+        for(size_t oi = 0; oi < row + 1; ++oi)
         {
             vector<T*> vBlocks;
-            for(size_t j = 0; j < col; ++j)
+            for(size_t oj = 0; oj < col + 1; ++oj)
             {
-                auto pBlock = new T(parent);
-                pBlock->id = i * row + j;
-                vBlocks.push_back(pBlock);
-                layout->addWidget(pBlock, i, j);
+                if(oi == 0 && oj == 0)
+                {
+                    continue;
+                }
+                else if(oi == 0)
+                {
+                    pLabels.push_back(new QLabel(QString((int)(oj + 'A' - 1)),parent));
+                    layout->addWidget(pLabels.back(),oi, oj);
+                }
+                else if(oj == 0)
+                {
+                    pLabels.push_back(new QLabel(QString::number(oi),parent));
+                    layout->addWidget(pLabels.back(),oi, oj);
+                }
+                else
+                {
+                    int i = oi - 1;
+                    int j = oj - 1;
+                    auto pBlock = new T(parent);
+                    pBlock->id = i * row + j;
+                    vBlocks.push_back(pBlock);
+                    layout->addWidget(pBlock, oi, oj);
+                }
             }
-            pBlocks.push_back(vBlocks);
+            if(!vBlocks.empty())
+                pBlocks.push_back(vBlocks);
         }
+//        for(size_t i = 0; i < row; ++i)
+//        {
+//            vector<T*> vBlocks;
+//            for(size_t j = 0; j < col; ++j)
+//            {
+//                auto pBlock = new T(parent);
+//                pBlock->id = i * row + j;
+//                vBlocks.push_back(pBlock);
+//                layout->addWidget(pBlock, i, j);
+//            }
+//            pBlocks.push_back(vBlocks);
+//        }
     }
 };
 
