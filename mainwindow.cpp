@@ -66,7 +66,7 @@ void MainWindow::AI(const State& s)
     int bestMove = -1;
     QTime time;
     time.start();
-    qDebug() << "Best estimation value: " << AlphaBeta(s, getCurrentPlayerChessColor(), 5, positionalValue, INT_MIN, INT_MAX, bestMove);
+    qDebug() << "Best estimation value: " << AlphaBeta(s, getCurrentPlayerChessColor(), 7, positionalValue, INT_MIN, INT_MAX, bestMove);
     qDebug() << "Search Spend: " << time.elapsed() << "(ms)";
     if(bestMove == -1)
     {
@@ -85,6 +85,10 @@ MainWindow::MainWindow(QWidget *parent, size_t row, size_t col) :
     ui->setupUi(this);
     grid = new Grid<ChessBlock>(this, ui->gridLayout_2, row, col);
     resetBoard();
+//    const int ratio = 6;
+//    ui->gridLayout->setColumnStretch(0,ratio);
+//    ui->gridLayout->setColumnStretch(1,1);
+    ui->gridLayout_2->setContentsMargins(0,0,0,this->height() - (this->width() - ui->lcdNumber->width()));
     receiver = new QUdpSocket(this);
     receiver->bind(0, QAbstractSocket::ShareAddress);
     auto port = receiver->localPort();
