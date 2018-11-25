@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <map>
 #include <QThread>
+#include <QMessageBox>
 #include <QClipboard>
 #include <QTime>
 #include <cstdint>
@@ -66,7 +67,7 @@ void MainWindow::AI(const State& s)
     int bestMove = -1;
     QTime time;
     time.start();
-    qDebug() << "Best estimation value: " << AlphaBeta(s, getCurrentPlayerChessColor(), 7, positionalValue, INT_MIN, INT_MAX, bestMove);
+    qDebug() << "Best estimation value: " << AlphaBeta(s, getCurrentPlayerChessColor(), THINKINGLEVEL, positionalValue, INT_MIN, INT_MAX, bestMove);
     qDebug() << "Search Spend: " << time.elapsed() << "(ms)";
     if(bestMove == -1)
     {
@@ -99,6 +100,7 @@ MainWindow::MainWindow(QWidget *parent, size_t row, size_t col) :
     ui->lineEdit->setPlaceholderText("远程玩家 IP:Port");
     connect(this, SIGNAL(remoteChallengeEvent(QString)), this, SLOT(on_remoteChallengeEvent(QString)));
     connect(this, &MainWindow::reqRepaint, this, &MainWindow::on_reqRepaint);
+    connect(this, &MainWindow::gameOverEvent, this, &MainWindow::on_GameOver);
 }
 
 MainWindow::~MainWindow()
@@ -119,7 +121,6 @@ void MainWindow::control_func()
         quint16 port;
         datagram.resize(size);
         int id;
-//        json j;
         QJsonParseError jsonError;
         QJsonDocument document;
         receiver->readDatagram(datagram.data(), datagram.size(), &addr, &port);
@@ -133,19 +134,7 @@ void MainWindow::control_func()
         if(magic != MAGIC_NUM)
             continue;
         id = object.value("id").toInt();
-        qDebug() << "Player " << currentPlayer << " down at row:" << id / GAMESCALE << ", col:" << id % GAMESCALE;
-
-//        try {
-////            j = json::parse(datagram.toStdString());
-//        } catch (...) {
-//            continue;
-//        }
-//        try {
-//            if(j["magic"] != MAGIC_NUM) throw;
-//            id = j["id"];
-//        } catch(...) {
-//            continue;
-//        }
+        qDebug() << "Player " << currentPlayer << " down at row:" << (id / GAMESCALE) + 1 << ", col:" << (char)((id % GAMESCALE) + 'A');
         if(!gamming)
         {
             ui->checkBox->setChecked(false);
@@ -203,6 +192,8 @@ void MainWindow::startGame()
 //    processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2, BLACK);
 //    processGrid(GAMESCALE / 2, GAMESCALE / 2 - 1, BLACK);
 //    processGrid(GAMESCALE / 2, GAMESCALE / 2, WHITE);
+    grid->reDraw();
+    resetBoard();
     processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2 - 1, BLACK);
     processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2, WHITE);
     processGrid(GAMESCALE / 2, GAMESCALE / 2 - 1, WHITE);
@@ -294,6 +285,13 @@ void MainWindow::on_reqRepaint()
     repaint();
 }
 
+void MainWindow::on_GameOver()
+{
+    qDebug() << "Game Over";
+    QMessageBox::information(this, "游戏结束", ui->label_4->text().toInt() > ui->label_4->text().toInt() ? "黑子胜" : "白子胜");
+    ui->pushButton_3->clicked();
+}
+
 void MainWindow::on_remoteChallengeEvent(const QString &str)
 {
     Q_UNUSED(str);
@@ -348,6 +346,12 @@ void MainWindow::on_pushButton_2_clicked()
     ui->pushButton_3->setEnabled(true);
 }
 
+bool noAvailMove(const std::array<int, GAMESCALE * GAMESCALE>& avi)
+{
+    for(auto&i:avi) if(i!=0) return false;
+    return true;
+}
+
 void MainWindow::processMove(size_t x, size_t y)
 {
     auto color = getCurrentPlayerChessColor();
@@ -356,14 +360,24 @@ void MainWindow::processMove(size_t x, size_t y)
     auto ret = fromState(n);
     int b = ret.first;
     int w = ret.second;
-//    auto [b,w] = fromState(n);
-
     ui->label_4->setText("黑子数量：" + QString::number(b));
     ui->label_5->setText("白子数量：" + QString::number(w));
     setCurrentPlayer(!currentPlayer);
     auto avi = getAvail(n, getCurrentPlayerChessColor());
     drawAvailNum(avi);
     emit reqRepaint();
+    if(noAvailMove(avi))
+    {
+        setCurrentPlayer(!currentPlayer);
+        auto avi = getAvail(n, getCurrentPlayerChessColor());
+        drawAvailNum(avi);
+        emit reqRepaint();
+        if(noAvailMove(avi))
+        {
+            emit gameOverEvent();
+            return;
+        }
+    }
     if(playerType[currentPlayer] == COMPUTER)
     {
         ai_thread = new std::thread(&MainWindow::AI, this, toState());
@@ -401,8 +415,6 @@ void MainWindow::on_pushButton_3_clicked()
         ai_thread->join();
     gamming = false;
     resetTimer();
-    grid->reDraw();
-    resetBoard();
     ui->pushButton_3->setEnabled(false);
 
 }

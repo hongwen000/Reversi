@@ -217,7 +217,9 @@ int AlphaBeta(const State& s, int color, int limit, const valueFunc& V, int alph
             isTerminal = false;
             auto ns = s;
             ns[i] = (uint8_t)color;
-            auto new_alpha = AlphaBeta(ns, !color, limit - 1, V, alpha, beta, lbestMove);
+            int nextColor = (color == BLACK) ? WHITE : BLACK;
+            auto new_alpha = AlphaBeta(ns, nextColor, limit - 1, V, alpha, beta, lbestMove);
+            if(limit == THINKINGLEVEL) qDebug() << "new_alpha:"<<  new_alpha;
             if(new_alpha > alpha)
             {
                 alpha = new_alpha;
@@ -237,7 +239,9 @@ int AlphaBeta(const State& s, int color, int limit, const valueFunc& V, int alph
             isTerminal = false;
             auto ns = s;
             ns[i] = (uint8_t)color;
-            auto new_beta = AlphaBeta(ns, !color, limit - 1, V, alpha, beta, lbestMove);
+            int nextColor = (color == BLACK) ? WHITE : BLACK;
+            auto new_beta = AlphaBeta(ns, nextColor, limit - 1, V, alpha, beta, lbestMove);
+            if(limit == THINKINGLEVEL) qDebug() << "new_beta:"<< new_beta;
             if(new_beta < beta)
             {
                 beta = new_beta;

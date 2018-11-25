@@ -7,6 +7,7 @@ using namespace std;
 #include <utility>
 #include <functional>
 enum {EMPTY = 0, BLACK, WHITE};
+#define THINKINGLEVEL 10
 
 using State = std::array<uint8_t, GAMESCALE * GAMESCALE>;
 

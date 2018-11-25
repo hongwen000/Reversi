@@ -92,9 +92,11 @@ private:
     void panicAI(Grid<ChessBlock> * grid);
 signals:
     void remoteChallengeEvent(const QString &);
+    void gameOverEvent();
     void reqRepaint();
 private slots:
     void on_reqRepaint();
+    void on_GameOver();
     void on_remoteChallengeEvent(const QString &str);
 };
 
