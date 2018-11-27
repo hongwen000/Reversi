@@ -60,15 +60,18 @@ void MainWindow::panicAI(Grid<ChessBlock> * grid)
         break;
     }
 }
-
-void MainWindow::AI(const State& s)
+int totalTime = 0;
+void MainWindow::AI(const State& s, int thinkingLevel = THINKINGLEVEL)
 {
 //    QThread::sleep(1);
     int bestMove = -1;
     QTime time;
     time.start();
-    qDebug() << "Best estimation value: " << AlphaBeta(s, getCurrentPlayerChessColor(), THINKINGLEVEL, positionalValue, INT_MIN, INT_MAX, bestMove);
-    qDebug() << "Search Spend: " << time.elapsed() << "(ms)";
+    qDebug() << "AI搜索层数" << thinkingLevel << "层";
+    qDebug() << "最佳效用值" << AlphaBeta(s, getCurrentPlayerChessColor(), thinkingLevel, positionalValue, INT_MIN, INT_MAX, bestMove);
+    qDebug() << "搜索耗时" << time.elapsed() << "(ms)";
+    totalTime += time.elapsed();
+    qDebug() << "Total Time" << totalTime << "(ms)";
     if(bestMove == -1)
     {
         gamming = false;
@@ -134,7 +137,7 @@ void MainWindow::control_func()
         if(magic != MAGIC_NUM)
             continue;
         id = object.value("id").toInt();
-        qDebug() << "Player " << currentPlayer << " down at row:" << (id / GAMESCALE) + 1 << ", col:" << (char)((id % GAMESCALE) + 'A');
+        qDebug() << "玩家" << (currentPlayer ? "二" : "一") << "落子在" << (id / GAMESCALE) + 1 << "行" << (char)((id % GAMESCALE) + 'A') << "列";
         if(!gamming)
         {
             ui->checkBox->setChecked(false);
@@ -265,7 +268,7 @@ void MainWindow::processGrid(int x, int y, int color)
     grid->setOverlayPic(x, y, color == WHITE ? WCFN : BCFN);
     grid->pBlocks[x][y]->color = color;
     grid->pBlocks[x][y]->isOccupied = true;
-    emit reqRepaint();
+//    emit reqRepaint();
 }
 
 void MainWindow::resetTimer()
@@ -287,8 +290,10 @@ void MainWindow::on_reqRepaint()
 
 void MainWindow::on_GameOver()
 {
-    qDebug() << "Game Over";
-    QMessageBox::information(this, "游戏结束", ui->label_4->text().toInt() > ui->label_4->text().toInt() ? "黑子胜" : "白子胜");
+    int numB =  ui->label_4->text().split(":",QString::SkipEmptyParts)[1].toInt();
+    int numW =  ui->label_5->text().split(":",QString::SkipEmptyParts)[1].toInt();
+    qDebug() << "Game Over " << numB << ":" << numW;
+    QMessageBox::information(this, "游戏结束", numB > numW ? "黑子胜" : "白子胜");
     ui->pushButton_3->clicked();
 }
 
@@ -341,7 +346,7 @@ void MainWindow::on_pushButton_2_clicked()
     startGame();
     if(playerType[currentPlayer] == COMPUTER)
     {
-        ai_thread = new std::thread(&MainWindow::AI, this, toState());
+        ai_thread = new std::thread(&MainWindow::AI, this, toState(), 10);
     }
     ui->pushButton_3->setEnabled(true);
 }
@@ -360,8 +365,8 @@ void MainWindow::processMove(size_t x, size_t y)
     auto ret = fromState(n);
     int b = ret.first;
     int w = ret.second;
-    ui->label_4->setText("黑子数量：" + QString::number(b));
-    ui->label_5->setText("白子数量：" + QString::number(w));
+    ui->label_4->setText("黑子数量:" + QString::number(b));
+    ui->label_5->setText("白子数量:" + QString::number(w));
     setCurrentPlayer(!currentPlayer);
     auto avi = getAvail(n, getCurrentPlayerChessColor());
     drawAvailNum(avi);
@@ -380,14 +385,16 @@ void MainWindow::processMove(size_t x, size_t y)
     }
     if(playerType[currentPlayer] == COMPUTER)
     {
-        ai_thread = new std::thread(&MainWindow::AI, this, toState());
+        ai_thread = new std::thread(&MainWindow::AI, this, toState(), 10);
     }
 //    if(currentPlayer == PLAYER1 && playerType[currentPlayer] == COMPUTER)
 //    {
-//        ai_thread = new std::thread(&MainWindow::AI, this, toState());
+//        ai_thread = new std::thread(&MainWindow::AI, this, toState(), 10);
 //    }
 //    if(currentPlayer == PLAYER2 && playerType[currentPlayer] == COMPUTER)
 //    {
+//        ai_thread = new std::thread(&MainWindow::AI, this, toState(), 1);
+//        panic_ai_thread = new std::thread(&MainWindow::AI, this, toState(), 1);
 //        panic_ai_thread = new std::thread(&MainWindow::panicAI, this, grid);
 //    }
 }

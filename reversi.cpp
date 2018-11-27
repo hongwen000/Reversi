@@ -159,78 +159,164 @@ static const int values[8][8] =
 static const int * pvalues = ((const int *)values);
 
 
+// 评估函数，s是要评估的状态，color是当前要落子的棋子颜色
 int positionalValue(const State& s, int color)
 {
+    // 黑子数量
+    int bcnt = 0;
+    // 白子数量
+    int wcnt = 0;
+    // 空白位置数量
+    int ecnt = 0;
+    // 仅用于8X8的黑白棋
     if(GAMESCALE != 8) throw;
+    // 效用值
     int ret = 0;
+    // 获取当前可行动的位置
     auto avi = getAvail(s, color);
+    // 移动性
     int mobility = 0;
+    // 如果某个位置可落子数大于0，移动性+1
     for(const auto& i : avi) if(i)mobility++;
+    // 遍历所有位置, 依据价值表计算局面的价值
     for(int i = 0; i < 64; ++i)
     {
-        if(s[i] == EMPTY) continue;
-        else if(s[i] == BLACK) ret += *(pvalues + i);
-        else ret -= *(pvalues + i);
+        // 若为空,价值为0
+        if(s[i] == EMPTY)
+        {
+            ecnt++;
+            continue;
+        }
+        // 若为黑子，加上价值
+        else if(s[i] == BLACK)
+        {
+            ret += *(pvalues + i);
+            bcnt++;
+        }
+        // 若为白子，减去价值
+        else
+        {
+            ret -= *(pvalues + i);
+            wcnt++;
+        }
     }
-    return (ret + mobility * (color == BLACK? 10 : -10));
+    // 判断当前局面是否已经失败
+    if(mobility == 0 && color == BLACK && bcnt < wcnt)
+        ret -= 1000 * (ecnt == 0);
+    else if(mobility == 0 && color == WHITE && bcnt > wcnt)
+        ret += 1000 * (ecnt == 0);
+    // 返回加权后的价值
+    return (ret + mobility * 5 *(color == BLACK? 1 : -1));
 }
 
+/* 	MinMax搜索
+/	s是当前状态
+/	color是当前棋手持的棋子颜色（BLACK/WHITE）
+/	limit是最大搜索层数
+/ 	V是评估函数
+/	bestMove是最佳落子位置
+*/
 int MinMax(const State& s, int color, int limit, const valueFunc& V, int & bestMove)
 {
+    // 若达到了最大探索深度，则对当前状态使用启发式函数求估算的价值
     if(limit == 0) return V(s, color);
+    // 获得当前颜色的棋子可移动的位置
     auto avil = getAvail(s, color);
+    // 记录是否为叶子节点
     bool isTerminal = true;
+    // 记录最佳效益值
     int bestValue = 0;
     int lbestMove;
+    // 记录是否在探索第一个子节点
     bool isFirstTime = true;
+    // 遍历所有位置
     for(size_t i = 0; i < avil.size(); ++i)
     {
+        // 如果该位置当前棋手不可落子，检查下一状态
         if(avil[i] == 0) continue;
+        // 发现了可落子位置，说明不是叶子节点
         isTerminal = false;
+        // 生成在该点落子的子状态
         auto ns = s;
         ns[i] = (uint8_t)color;
+        // 下一轮的棋子颜色
         int nextColor = (color == BLACK) ? WHITE : BLACK;
+        // 获取子状态的效益值
         auto ret = MinMax(ns, nextColor, limit - 1, V, lbestMove);
-        if(limit == 7) qDebug() << ret;
-        if((color == BLACK && ret > bestValue) || (color == WHITE && ret < bestValue) || isFirstTime)
+        // 以下三种情况更新最佳效益值
+        // 1. 第一次探索子状态
+        // 2. 当前棋手持黑子，且子状态效益值大于最佳效益值
+        // 2. 当前棋手持白子，且子状态效益值小于最佳效益值
+        if(isFirstTime || (color == BLACK && ret > bestValue) || (color == WHITE && ret < bestValue))
         {
             bestValue = ret;
             bestMove = i;
         }
         isFirstTime = false;
     }
+    // 未发现可落子位置，则对当前状态使用启发式函数求估算的价值
     if(isTerminal) return V(s, color);
+    // 返回最佳效益值
     return bestValue;
 }
 
-int AlphaBeta(const State& s, int color, int limit, const valueFunc& V, int alpha, int beta, int & bestMove)
+/* 	MinMax搜索
+/	s是当前状态
+/	color是当前棋手持的棋子颜色（BLACK/WHITE）
+/	limit是最大搜索层数
+/ 	V是评估函数
+/	alpha是alpha值
+/	beta是beta值
+/	bestMove是最佳落子位置
+*/
+int AlphaBeta_worker(const State& s, int color, int limit, const valueFunc& V,
+              int alpha, int beta);
+int AlphaBeta(const State& s, int color, int limit, const valueFunc& V,
+              int alpha, int beta, int & bestMove)
 {
+    // 若达到了最大探索深度，则对当前状态使用启发式函数求估算的价值
     if(limit == 0) return V(s, color);
+    // 获得当前颜色的棋子可移动的位置
     auto avil = getAvail(s, color);
+    // 记录是否为叶子节点
     bool isTerminal = true;
     int lbestMove;
+    // 若当前棋手持黑子
     if(color == BLACK)
     {
+        // 遍历所有位置
         for(size_t i = 0; i < avil.size(); ++i)
         {
+            // 如果该位置当前棋手不可落子，检查下一状态
             if(avil[i] == 0) continue;
+            // 发现了可落子位置，说明不是叶子节点
             isTerminal = false;
+            // 生成在该点落子的子状态
             auto ns = s;
             ns[i] = (uint8_t)color;
+            // 下一轮的棋子颜色
             int nextColor = (color == BLACK) ? WHITE : BLACK;
+            // 得到某个子节点的效用值
             auto new_alpha = AlphaBeta(ns, nextColor, limit - 1, V, alpha, beta, lbestMove);
-            if(limit == THINKINGLEVEL) qDebug() << "new_alpha:"<<  new_alpha;
+            // 若子节点的效用值大于alpha值，则更新该值
             if(new_alpha > alpha)
             {
+                if(limit == 10)
+                    qDebug() << "	若落子在" << (i / GAMESCALE) + 1 << "行" << (char)((i % GAMESCALE) + 'A') << "列, alpha = " << new_alpha;
                 alpha = new_alpha;
                 bestMove = i;
             }
+            // 当前节点的alpha值已经大于父节点的beta值，当前节点已经不会被选
             if(beta <= alpha)
+                //发送剪枝
                 break;
         }
+        // 未发现可落子位置，则对当前状态使用启发式函数求估算的价值
         if(isTerminal) return V(s, color);
+        // 返回alpha值
         else return alpha;
     }
+    // 若当前棋手持白子，同理
     else
     {
         for(size_t i = 0; i < avil.size(); ++i)
@@ -241,9 +327,10 @@ int AlphaBeta(const State& s, int color, int limit, const valueFunc& V, int alph
             ns[i] = (uint8_t)color;
             int nextColor = (color == BLACK) ? WHITE : BLACK;
             auto new_beta = AlphaBeta(ns, nextColor, limit - 1, V, alpha, beta, lbestMove);
-            if(limit == THINKINGLEVEL) qDebug() << "new_beta:"<< new_beta;
             if(new_beta < beta)
             {
+                if(limit == 10)
+                    qDebug() << "	若落子在" << (i / GAMESCALE) + 1 << "行" << (char)((i % GAMESCALE) + 'A') << "列, beta = " << new_beta;
                 beta = new_beta;
                 bestMove = i;
             }

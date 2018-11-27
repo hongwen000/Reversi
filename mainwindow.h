@@ -79,7 +79,7 @@ private:
     }
     int getFirstPlayer();
     int getCurrentPlayerChessColor();
-    void AI(const State& s);
+    void AI(const State& s, int thinkingLevel);
     void control_func();
     void resetBoard();
     void setCurrentPlayer(int player);
