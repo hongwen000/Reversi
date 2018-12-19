@@ -1,5 +1,6 @@
 #include "reversi.h"
 #include <QDebug>
+#include <iostream>
 
 const int checkDirection[8][2] = {
     {-1, 0},
@@ -49,6 +50,7 @@ State getNextState(const State &s, int id, int color)
             {
                 fx = i;
                 fy = j;
+                break;
 //                qDebug() << "fx, fy: " << fx << " " << fy;
             }
             if(s[getID(i,j)] == EMPTY)
@@ -93,8 +95,43 @@ bool diffColorChess(int c1, int c2)
         return true;
     return false;
 }
+State debug0 = {
+    {1,1,1,1,0,0,0,0,
+     1,2,1,1,0,2,0,0,
+     1,2,1,1,2,2,2,2,
+     1,2,1,1,2,2,2,2,
+     1,2,2,1,1,1,2,2,
+     1,2,2,1,1,1,2,2,
+     1,0,1,1,1,1,0,0,
+     1,1,1,1,1,1,0,0
+    }
+};
+State debug = {
+    {1,1,1,1,0,0,0,0,
+     1,2,1,1,1,2,0,0,
+     1,2,1,1,1,2,2,2,
+     1,2,1,1,1,2,2,2,
+     1,2,2,1,1,1,2,2,
+     1,2,2,1,1,1,2,2,
+     1,0,1,1,1,1,0,0,
+     1,1,1,1,1,1,0,0
+    }
+};
+template <typename T>
+void debugState(const std::array<T, GAMESCALE * GAMESCALE>& s)
+{
+    for(int i = 0; i < GAMESCALE * GAMESCALE; ++i)
+    {
+        if((i % 8) == 0) std::cout << endl;
+        std::cout << (char)('0' + s[i]) << ",";
+    }
+    std::cout << endl;
+}
 std::array<int, GAMESCALE * GAMESCALE> getAvail(const State& s, int color)
 {
+//    std::cout << "Searching what " << (color == WHITE ? "WHITE" : "BLACK") << " can play";
+//    std::cout << "State of s is" << std::endl;
+//    debugState(s);
     std::array<int, GAMESCALE * GAMESCALE> ret;
     for(auto & i: ret) i = 0;
     for(int id = 0; id < GAMESCALE * GAMESCALE; ++id)
@@ -132,6 +169,7 @@ std::array<int, GAMESCALE * GAMESCALE> getAvail(const State& s, int color)
                     else if(diffColorChess(color, s[id2]))
                     {
                         this_d++;
+//                        qDebug() << "Find possible" << id << this_d;
                     }
                     else if(s[id2] == EMPTY)
                     {
@@ -143,6 +181,8 @@ std::array<int, GAMESCALE * GAMESCALE> getAvail(const State& s, int color)
             ret[id] += this_d;
         }
     }
+//    std::cout << "Avil of s is " << std::endl;
+//    debugState(ret);
     return ret;
 }
 

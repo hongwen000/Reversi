@@ -97,12 +97,16 @@ public:
                 }
                 else if(oi == 0)
                 {
+#ifdef USE_LETTER_LABEL
                     pLabels.push_back(new QLabel(QString((int)(oj + 'A' - 1)),parent));
+#else
+                    pLabels.push_back(new QLabel(QString::number(oj-1)));
+#endif
                     layout->addWidget(pLabels.back(),oi, oj);
                 }
                 else if(oj == 0)
                 {
-                    pLabels.push_back(new QLabel(QString::number(oi),parent));
+                    pLabels.push_back(new QLabel(QString::number(oi-1),parent));
                     layout->addWidget(pLabels.back(),oi, oj);
                 }
                 else

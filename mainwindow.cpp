@@ -7,11 +7,30 @@
 #include <QClipboard>
 #include <QTime>
 #include <cstdint>
+#include <QProcess>
+
 using namespace std;
 
+QVariant convertToJSON(const QByteArray& datagram)
+{
+    QJsonParseError jsonError;
+    QJsonDocument document;
+    document = QJsonDocument::fromJson(datagram, &jsonError);
+    if(document.isNull() || !(jsonError.error == QJsonParseError::NoError) || !document.isObject())
+        return QVariant();
+    QJsonObject object = document.object();
+    if(!object.contains("magic") || !object.value("magic").isString())
+        return QVariant();
+    auto magic = object.value("magic").toString();
+    if(magic != MAGIC_NUM)
+        return QVariant();
+    return QVariant(object);
+}
 int currentPlayer;
-QString playerIP[2] = {"127.0.0.1", "127.0.0.1"};
-int playerListenPorts[2] = {16666, 16666};
+QString serverIP = "127.0.0.1";
+int serverPort;
+QString localIP = "127.0.0.1";
+int localPort = -1;
 int playerType[2] = {HUMAN, COMPUTER};
 atomic_bool gamming(false);
 std::map<QString, int> mp = {{"人类", HUMAN},
@@ -21,23 +40,14 @@ std::map<QString, int> mp = {{"人类", HUMAN},
 void sendMove(int move)
 {
     QJsonObject j;
-//    json j;
     j.insert("magic", MAGIC_NUM);
-//    j["magic"] = MAGIC_NUM;
     j.insert("id", move);
-//    j["id"] = move;
     QJsonDocument document;
     document.setObject(j);
     QByteArray datagram = document.toJson(QJsonDocument::Compact);
     auto sender = new QUdpSocket(nullptr);
-    QHostAddress host1(playerIP[0]);
-    sender->writeDatagram(datagram, host1, playerListenPorts[0]);
-    if(playerIP[0] != playerIP[1] || playerListenPorts[0] != playerListenPorts[1])
-    {
-        QHostAddress host2(playerIP[1]);
-        auto sender = new QUdpSocket(nullptr);
-        sender->writeDatagram(datagram, host2, playerListenPorts[1]);
-    }
+    QHostAddress host(serverIP);
+    sender->writeDatagram(datagram, host, serverPort);
 }
 
 void MainWindow::panicAI(Grid<ChessBlock> * grid)
@@ -61,15 +71,28 @@ void MainWindow::panicAI(Grid<ChessBlock> * grid)
     }
 }
 int totalTime = 0;
+#ifdef USE_PYTHON_AGENT
+void MainWindow::AI(const State& s, int thinkingLevel = THINKINGLEVEL)
+{
+    QJsonObject j;
+    j.insert("magic", MAGIC_NUM);
+    j.insert("state", QJsonValue(QString::fromUtf8(s.data(), GAMESCALE * GAMESCALE)));
+    j.insert("chesscolor", getCurrentPlayerChessColor());
+    QJsonDocument document;
+    document.setObject(j);
+    QByteArray datagram = document.toJson(QJsonDocument::Compact);
+    python_connector->writeDatagram(datagram, QHostAddress("127.0.0.1"), PYTHON_PORT);
+}
+#else
 void MainWindow::AI(const State& s, int thinkingLevel = THINKINGLEVEL)
 {
 //    QThread::sleep(1);
     int bestMove = -1;
     QTime time;
     time.start();
-    qDebug() << "AI搜索层数" << thinkingLevel << "层";
+    //qDebug() << "AI搜索层数" << thinkingLevel << "层";
     qDebug() << "最佳效用值" << AlphaBeta(s, getCurrentPlayerChessColor(), thinkingLevel, positionalValue, INT_MIN, INT_MAX, bestMove);
-    qDebug() << "搜索耗时" << time.elapsed() << "(ms)";
+    //qDebug() << "搜索耗时" << time.elapsed() << "(ms)";
     totalTime += time.elapsed();
     qDebug() << "Total Time" << totalTime << "(ms)";
     if(bestMove == -1)
@@ -81,6 +104,7 @@ void MainWindow::AI(const State& s, int thinkingLevel = THINKINGLEVEL)
         sendMove(bestMove);
     }
 }
+#endif
 
 
 MainWindow::MainWindow(QWidget *parent, size_t row, size_t col) :
@@ -89,21 +113,22 @@ MainWindow::MainWindow(QWidget *parent, size_t row, size_t col) :
     ui->setupUi(this);
     grid = new Grid<ChessBlock>(this, ui->gridLayout_2, row, col);
     resetBoard();
-//    const int ratio = 6;
-//    ui->gridLayout->setColumnStretch(0,ratio);
-//    ui->gridLayout->setColumnStretch(1,1);
     ui->gridLayout_2->setContentsMargins(0,0,0,this->height() - (this->width() - ui->lcdNumber->width()));
-    receiver = new QUdpSocket(this);
-    receiver->bind(0, QAbstractSocket::ShareAddress);
-    auto port = receiver->localPort();
-    playerListenPorts[0] = port;
-    ui->statusBar->showMessage("监听端口" + QString::number(port));
+
+
     control_thread = new std::thread(&MainWindow::control_func, this);
+    room_thread = new std::thread(&MainWindow::room_func, this);
     ui->lcdNumber->setAutoFillBackground(true);
     ui->lineEdit->setPlaceholderText("远程玩家 IP:Port");
+
+    connect(this, &MainWindow::roomCreate, [this](int port){
+        ui->lineEdit->setText(serverIP + ":" + QString::number(serverPort));
+        ui->statusBar->showMessage("房间端口" + QString::number(port));
+    });
     connect(this, SIGNAL(remoteChallengeEvent(QString)), this, SLOT(on_remoteChallengeEvent(QString)));
     connect(this, &MainWindow::reqRepaint, this, &MainWindow::on_reqRepaint);
     connect(this, &MainWindow::gameOverEvent, this, &MainWindow::on_GameOver);
+    connect(this, &MainWindow::startGameEvent, this, &MainWindow::on_GameStart);
 }
 
 MainWindow::~MainWindow()
@@ -115,9 +140,16 @@ MainWindow::~MainWindow()
 
 void MainWindow::control_func()
 {
+    // UDP随机监听一个端口
+    receiver = new QUdpSocket(0);
+    receiver->bind(0, QAbstractSocket::ShareAddress);
+    // 获取监听的端口号
+    auto port = receiver->localPort();
+    localPort = port;
     while (!exit) {
         QThread::msleep(50);
         QByteArray datagram;
+        // 查看有没有收到包
         auto size = receiver->pendingDatagramSize();
         if(!size) continue;
         QHostAddress addr;
@@ -126,6 +158,7 @@ void MainWindow::control_func()
         int id;
         QJsonParseError jsonError;
         QJsonDocument document;
+        // 如果收到就读取，放到一个datagram里面
         receiver->readDatagram(datagram.data(), datagram.size(), &addr, &port);
         document = QJsonDocument::fromJson(datagram, &jsonError);
         if(document.isNull() || !(jsonError.error == QJsonParseError::NoError) || !document.isObject())
@@ -136,19 +169,165 @@ void MainWindow::control_func()
         auto magic = object.value("magic").toString();
         if(magic != MAGIC_NUM)
             continue;
-        id = object.value("id").toInt();
-        qDebug() << "玩家" << (currentPlayer ? "二" : "一") << "落子在" << (id / GAMESCALE) + 1 << "行" << (char)((id % GAMESCALE) + 'A') << "列";
-        if(!gamming)
+        if(object.contains("gamestatus"))
         {
-            ui->checkBox->setChecked(false);
-            startGame();
+            if(object.value("gamestatus").toBool())
+            {
+                emit startGameEvent();
+            }
+            else {
+                emit gameOverEvent();
+            }
         }
-        auto block = id;
-        auto this_row = block/col;
-        auto this_col = (block - (block / col) * row);
-        processMove(this_row, this_col);
+        else if(object.contains("id"))
+        {
+            id = object.value("id").toInt();
+#ifdef USE_LETTER_LABEL
+            qDebug() << "玩家" << (currentPlayer ? "二" : "一") << "落子在" << (id / GAMESCALE) + 1 << "行" << (char)((id % GAMESCALE) + 'A') << "列";
+#else
+            qDebug() << "玩家" << (currentPlayer ? "二" : "一") << "落子在" << (id / GAMESCALE)  << "行" << (id % GAMESCALE)  << "列";
+#endif
+            auto block = id;
+            auto this_row = block/col;
+            auto this_col = (block - (block / col) * row);
+            processMove(this_row, this_col);
+        }
         QApplication::processEvents();
+    }
+}
 
+
+void MainWindow::room_func()
+{
+    int askStartCnt = 0;
+    room = new QUdpSocket(0);
+    room->bind(0, QAbstractSocket::ShareAddress);
+    auto port = room->localPort();
+    python_connector = new QUdpSocket(0);
+    python_connector->bind(0, QAbstractSocket::ShareAddress);
+    auto python_conn_port = python_connector->localPort();
+    serverPort = port;
+    emit roomCreate(port);
+    vector<QHostAddress> playerAddr;
+    vector<int> playerPort;
+    bool start = false;
+//    QFile f("/tmp/room_type");
+//    f.open(QIODevice::WriteOnly);
+//    QTextStream out(&f);
+//    out << serverPort;
+//    f.close();
+#ifdef USE_PYTHON_AGENT
+    bool have_responce = false;
+    QJsonObject j;
+    j.insert("magic", MAGIC_NUM);
+    j.insert("roomport", serverPort);
+    while(localPort == -1);
+    j.insert("localport", localPort);
+    j.insert("connectport", python_conn_port);
+    QJsonDocument document;
+    document.setObject(j);
+    QByteArray datagram = document.toJson(QJsonDocument::Compact);
+    auto sender = new QUdpSocket(nullptr);
+    while(!have_responce)
+    {
+        sender->writeDatagram(datagram, QHostAddress("127.0.0.1"), PYTHON_PORT);
+        QThread::msleep(50);
+        auto size = room->pendingDatagramSize();
+        if(!size) continue;
+        qDebug() << size;
+        QByteArray datagram2;
+        datagram2.resize(size);
+        room->readDatagram(datagram2.data(), datagram2.size());
+        qDebug() << datagram2;
+        auto var = convertToJSON(datagram2);
+        if(var.isNull()) continue;
+        auto object = var.toJsonObject();
+        if(object.contains("responce"))
+            have_responce = true;
+        qDebug() << "GOOD";
+    }
+#endif
+    while (!exit) {
+        QThread::msleep(50);
+        auto size = room->pendingDatagramSize();
+        if(!size) continue;
+        QByteArray datagram;
+        QHostAddress addr;
+        quint16 port;
+        datagram.resize(size);
+        int id;
+        room->readDatagram(datagram.data(), datagram.size(), &addr, &port);
+        auto var = convertToJSON(datagram);
+        if(var.isNull()) continue;
+        auto object = var.toJsonObject();
+        if(!start)
+        {
+            if(!object.contains("addr") || !object.value("addr").isString())
+                continue;
+            if(!object.contains("port"))
+                continue;
+            auto addr = QHostAddress(object.value("addr").toString());
+            auto port = object.value("port").toInt();
+            if(std::find(playerAddr.begin(), playerAddr.end(), addr) == playerAddr.end() || std::find(playerPort.begin(), playerPort.end(), port) == playerPort.end())
+            {
+                playerAddr.push_back(addr);
+                playerPort.push_back(port);
+            }
+            if(++askStartCnt == 2)
+            {
+                start = true;
+                sendGameStatus(playerAddr, playerPort, true);
+                askStartCnt = 0;
+            }
+        }
+        else if(object.contains("id"))
+        {
+            id = object.value("id").toInt();
+#ifdef USE_LETTER_LABEL
+            qDebug() << "玩家" << (currentPlayer ? "二" : "一") << "落子在" << (id / GAMESCALE) + 1 << "行" << (char)((id % GAMESCALE) + 'A') << "列";
+#else
+//            qDebug() << "玩家" << (currentPlayer ? "二" : "一") << "落子在" << (id / GAMESCALE) + 1 << "行" << (id % GAMESCALE) + 1 << "列";
+#endif
+            sendBackMove(playerAddr, playerPort,id);
+        }
+        else if(object.contains("gamestatus") && object.value("gamestatus").isBool() && object.value("gamestatus").toBool() == false)
+        {
+            sendGameStatus(playerAddr, playerPort, false);
+            start = false;
+            playerAddr.clear();
+            playerPort.clear();
+        }
+    }
+}
+
+void MainWindow::sendGameStatus(const vector<QHostAddress>& addrs, const vector<int> ports, bool stat)
+{
+    for(size_t i = 0; i < addrs.size(); ++i)
+    {
+        QJsonObject j;
+        j.insert("magic", MAGIC_NUM);
+        j.insert("gamestatus", stat);
+        QJsonDocument document;
+        document.setObject(j);
+        QByteArray datagram = document.toJson(QJsonDocument::Compact);
+        auto sender = new QUdpSocket(nullptr);
+        sender->writeDatagram(datagram, addrs[i], ports[i]);
+    }
+}
+
+void MainWindow::sendBackMove(const vector<QHostAddress> &addrs, const vector<int> ports, int id)
+{
+
+    for(size_t i = 0; i < addrs.size(); ++i)
+    {
+        QJsonObject j;
+        j.insert("magic", MAGIC_NUM);
+        j.insert("id", id);
+        QJsonDocument document;
+        document.setObject(j);
+        QByteArray datagram = document.toJson(QJsonDocument::Compact);
+        auto sender = new QUdpSocket(nullptr);
+        sender->writeDatagram(datagram, addrs[i], ports[i]);
     }
 }
 
@@ -187,35 +366,46 @@ void MainWindow::setCurrentPlayer(int player)
     ui->lcdNumber->setPalette(pal);
     ui->lcdNumber->display(0);
 }
-
-
-void MainWindow::startGame()
+void MainWindow::applyState(const State& s)
 {
-//    processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2 - 1, WHITE);
-//    processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2, BLACK);
-//    processGrid(GAMESCALE / 2, GAMESCALE / 2 - 1, BLACK);
-//    processGrid(GAMESCALE / 2, GAMESCALE / 2, WHITE);
+    for(size_t i = 0; i < GAMESCALE * GAMESCALE; ++i)
+    {
+        auto row = i / GAMESCALE;
+        auto col = i % GAMESCALE;
+        processGrid(row, col, s[i]);
+    }
+}
+
+#define START_RL
+void MainWindow::startGameConfirmed()
+{
+    ui->pushButton_2->setEnabled(false);
+    ui->pushButton_3->setEnabled(true);
     grid->reDraw();
     resetBoard();
+    playerType[0] = mp[ui->comboBox_p1->currentText()];
+    playerType[1] = mp[ui->comboBox_p2->currentText()];
+#ifdef START_RL
+    processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2 - 1, WHITE);
+    processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2, BLACK);
+    processGrid(GAMESCALE / 2, GAMESCALE / 2 - 1, BLACK);
+    processGrid(GAMESCALE / 2, GAMESCALE / 2, WHITE);
+#else
     processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2 - 1, BLACK);
     processGrid(GAMESCALE / 2 - 1, GAMESCALE / 2, WHITE);
     processGrid(GAMESCALE / 2, GAMESCALE / 2 - 1, WHITE);
     processGrid(GAMESCALE / 2, GAMESCALE / 2, BLACK);
+#endif
     qDebug() << "Player " << getFirstPlayer() << " uses black chess";
     setCurrentPlayer(getFirstPlayer());
     auto ret = getAvail(toState(), getCurrentPlayerChessColor());
     drawAvailNum(ret);
     reqRepaint();
-    playerType[0] = mp[ui->comboBox_p1->currentText()];
-    playerType[1] = mp[ui->comboBox_p2->currentText()];
-    if(playerType[1] == REMOTE)
-    {
-        QStringList lst = ui->lineEdit->text().split(':', QString::SkipEmptyParts);
-        playerIP[1] = lst[0];
-        playerListenPorts[1] = lst[1].toInt();
-    }
     gamming = true;
-
+    if(playerType[currentPlayer] == COMPUTER)
+    {
+        ai_thread = new std::thread(&MainWindow::AI, this, toState(), 10);
+    }
 }
 
 void MainWindow::drawAvailNum(const array<int, GAMESCALE * GAMESCALE> &avi)
@@ -265,6 +455,7 @@ pair<int, int> MainWindow::fromState(const State &s)
 
 void MainWindow::processGrid(int x, int y, int color)
 {
+    if(color == EMPTY) return;
     grid->setOverlayPic(x, y, color == WHITE ? WCFN : BCFN);
     grid->pBlocks[x][y]->color = color;
     grid->pBlocks[x][y]->isOccupied = true;
@@ -294,7 +485,17 @@ void MainWindow::on_GameOver()
     int numW =  ui->label_5->text().split(":",QString::SkipEmptyParts)[1].toInt();
     qDebug() << "Game Over " << numB << ":" << numW;
     QMessageBox::information(this, "游戏结束", numB > numW ? "黑子胜" : "白子胜");
-    ui->pushButton_3->clicked();
+    ui->pushButton_2->setEnabled(true);
+    if(ai_thread && ai_thread->joinable())
+        ai_thread->join();
+    gamming = false;
+    resetTimer();
+    ui->pushButton_3->setEnabled(false);
+}
+
+void MainWindow::on_GameStart()
+{
+    startGameConfirmed();
 }
 
 void MainWindow::on_remoteChallengeEvent(const QString &str)
@@ -342,13 +543,25 @@ void ChessBlock::mousePressEvent(QMouseEvent *e)
 
 void MainWindow::on_pushButton_2_clicked()
 {
-    ui->pushButton_2->setEnabled(false);
-    startGame();
-    if(playerType[currentPlayer] == COMPUTER)
+    QStringList lst = ui->lineEdit->text().split(':', QString::SkipEmptyParts);
+    serverIP = lst[0];
+    serverPort = lst[1].toInt();
+    for(int i = 0;i < 2; ++i)
     {
-        ai_thread = new std::thread(&MainWindow::AI, this, toState(), 10);
+        if(playerType[i] != REMOTE)
+        {
+            QJsonObject j;
+            j.insert("magic", MAGIC_NUM);
+            j.insert("addr", localIP);
+            j.insert("port", localPort);
+            QJsonDocument document;
+            document.setObject(j);
+            QByteArray datagram = document.toJson(QJsonDocument::Compact);
+            auto sender = new QUdpSocket(nullptr);
+            QHostAddress host(serverIP);
+            sender->writeDatagram(datagram, host, serverPort);
+        }
     }
-    ui->pushButton_3->setEnabled(true);
 }
 
 bool noAvailMove(const std::array<int, GAMESCALE * GAMESCALE>& avi)
@@ -379,7 +592,15 @@ void MainWindow::processMove(size_t x, size_t y)
         emit reqRepaint();
         if(noAvailMove(avi))
         {
-            emit gameOverEvent();
+            QJsonObject j;
+            j.insert("magic", MAGIC_NUM);
+            j.insert("gamestatus", false);
+            QJsonDocument document;
+            document.setObject(j);
+            QByteArray datagram = document.toJson(QJsonDocument::Compact);
+            auto sender = new QUdpSocket(nullptr);
+            QHostAddress host(serverIP);
+            sender->writeDatagram(datagram, host, serverPort);
             return;
         }
     }
@@ -387,16 +608,6 @@ void MainWindow::processMove(size_t x, size_t y)
     {
         ai_thread = new std::thread(&MainWindow::AI, this, toState(), 10);
     }
-//    if(currentPlayer == PLAYER1 && playerType[currentPlayer] == COMPUTER)
-//    {
-//        ai_thread = new std::thread(&MainWindow::AI, this, toState(), 10);
-//    }
-//    if(currentPlayer == PLAYER2 && playerType[currentPlayer] == COMPUTER)
-//    {
-//        ai_thread = new std::thread(&MainWindow::AI, this, toState(), 1);
-//        panic_ai_thread = new std::thread(&MainWindow::AI, this, toState(), 1);
-//        panic_ai_thread = new std::thread(&MainWindow::panicAI, this, grid);
-//    }
 }
 
 int MainWindow::getFirstPlayer()
@@ -412,30 +623,33 @@ int MainWindow::getCurrentPlayerChessColor()
     else if(currentPlayer && !chk) color = BLACK;
     else if(!currentPlayer && chk) color = BLACK;
     else color = WHITE;
+//    if(color == WHITE) qDebug() << "Now WHITE";
+//    if(color == BLACK) qDebug() << "Now BLACK";
     return color;
 }
 
 void MainWindow::on_pushButton_3_clicked()
 {
-    ui->pushButton_2->setEnabled(true);
-    if(ai_thread && ai_thread->joinable())
-        ai_thread->join();
-    gamming = false;
-    resetTimer();
-    ui->pushButton_3->setEnabled(false);
+
+    QJsonObject j;
+    j.insert("magic", MAGIC_NUM);
+    j.insert("gamestatus", false);
+    QJsonDocument document;
+    document.setObject(j);
+    QByteArray datagram = document.toJson(QJsonDocument::Compact);
+    auto sender = new QUdpSocket(nullptr);
+    QHostAddress host(serverIP);
+    sender->writeDatagram(datagram, host, serverPort);
+
 
 }
 
 void MainWindow::on_comboBox_p2_currentTextChanged(const QString &arg1)
 {
-    if(mp[arg1] == REMOTE)
-        ui->lineEdit->setEnabled(true);
-    else
-        ui->lineEdit->setEnabled(false);
 }
 
 void MainWindow::on_pushButton_clicked()
 {
     QClipboard *clipboard = QApplication::clipboard();
-    clipboard->setText(QString::number(playerListenPorts[0]));
+    clipboard->setText(QString::number(serverPort));
 }

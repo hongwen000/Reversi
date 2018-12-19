@@ -15,6 +15,8 @@
 //#include "json.hpp"
 //using json = nlohmann::json;
 #define MAGIC_NUM "aahsudfhuasjkhgfusdhfuyhsjdfihweuqgh"
+#define USE_PYTHON_AGENT
+#define PYTHON_PORT 7593
 using namespace std;
 
 #define ODDFN  ":/img/Even.png"
@@ -50,7 +52,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr, size_t row = GAMESCALE,  size_t col = GAMESCALE);
     ~MainWindow();
 
-private slots:
+private Q_SLOTS:
     void on_pushButton_2_clicked();
 
     void on_pushButton_3_clicked();
@@ -65,9 +67,12 @@ private:
     size_t col;
     Grid<ChessBlock>* grid = nullptr;
     std::thread* control_thread = nullptr;
+    std::thread* room_thread = nullptr;
     std::thread* ai_thread = nullptr;
     std::thread* panic_ai_thread = nullptr;
     QUdpSocket* receiver = nullptr;
+    QUdpSocket* room = nullptr;
+    QUdpSocket* python_connector = nullptr;
     atomic_bool exit;
     QTimer *pTimer = nullptr;
     int remoteListenPort = -1;
@@ -78,25 +83,32 @@ private:
         grid->setPic(0,0, BCFN);
     }
     int getFirstPlayer();
+    void applyState(const State& s);
     int getCurrentPlayerChessColor();
     void AI(const State& s, int thinkingLevel);
     void control_func();
+    void room_func();
+    void sendGameStatus(const vector<QHostAddress>& addrs, const vector<int> ports, bool stat);
+    void sendBackMove(const vector<QHostAddress>& addrs, const vector<int> ports, int id);
     void resetBoard();
     void setCurrentPlayer(int player);
-    void startGame();
+    void startGameConfirmed();
     void drawAvailNum(const array<int, GAMESCALE * GAMESCALE> & avi);
     State toState();
     pair<int, int> fromState(const State& s);
     void processGrid(int x, int y, int color);
     void resetTimer();
     void panicAI(Grid<ChessBlock> * grid);
-signals:
+Q_SIGNALS:
     void remoteChallengeEvent(const QString &);
+    void startGameEvent();
     void gameOverEvent();
     void reqRepaint();
-private slots:
+    void roomCreate(int port);
+private Q_SLOTS:
     void on_reqRepaint();
     void on_GameOver();
+    void on_GameStart();
     void on_remoteChallengeEvent(const QString &str);
 };
 

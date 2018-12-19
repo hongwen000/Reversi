@@ -24,20 +24,22 @@ DEFINES += QT_DEPRECATED_WARNINGS
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 CONFIG += c++14
-QMAKE_CXXFLAGS += -std=c++14 -frtti -fexceptions
+#QMAKE_CXXFLAGS += -std=c++14 -frtti -fexceptions
 
 
 SOURCES += \
         main.cpp \
         mainwindow.cpp \
     grid.cpp \
-    reversi.cpp
+    reversi.cpp \
+    room.cpp
 
 HEADERS += \
         mainwindow.h \
     grid.h \
     reversi.h \
-    json.hpp
+    json.hpp \
+    room.h
 
 FORMS += \
         mainwindow.ui

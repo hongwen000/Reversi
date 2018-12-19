@@ -7,9 +7,11 @@ using namespace std;
 #include <utility>
 #include <functional>
 enum {EMPTY = 0, BLACK, WHITE};
-#define THINKINGLEVEL 10
+#define THINKINGLEVEL 9
 
-using State = std::array<uint8_t, GAMESCALE * GAMESCALE>;
+using State = std::array<char, GAMESCALE * GAMESCALE>;
+extern State debug;
+extern State debug0;
 
 extern const int checkDirection[8][2];
 bool inBoundary(int x, int y);

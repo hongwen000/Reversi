@@ -56,6 +56,11 @@
           <string>电脑</string>
          </property>
         </item>
+        <item>
+         <property name="text">
+          <string>远程玩家</string>
+         </property>
+        </item>
        </widget>
       </item>
       <item>
@@ -87,7 +92,7 @@
       <item>
        <widget class="QLineEdit" name="lineEdit">
         <property name="enabled">
-         <bool>false</bool>
+         <bool>true</bool>
         </property>
         <property name="autoFillBackground">
          <bool>false</bool>
